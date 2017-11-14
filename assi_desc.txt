@@ -1,0 +1,18 @@
+Project 5 - Due date: 11/16/2017 (Thursday, 11:59pm PT) via OSBLE+ dropbox
+Assignment type: Individual 
+
+In this project you will implement an OpenMP multithreaded PI value estimator using the algorithm discussed in class. This algorithm essentially throws a dart n times into a unit square and computes the fraction of times that dart falls into the embedded unit circle. This fraction multiplied by 4 gives an estimate for PI. 
+Here is the classroom scribe for further details: PDF
+
+Your code should expect two arguments: <n> <number of threads>.
+Your code should output the PI value estimated at the end.  Note that the precision of the PI estimate could potentially vary with the number of threads (assuming n is fixed). 
+Your code should also output the total time (calculated using omp_get_wtime function). 
+
+Experiment for different values of n (starting from 1024 and going all the way up to a billion or more) and p (1,2,4..).  
+
+Please do two sets of experiments as instructed below:
+
+1) For speedup - keeping n fixed and increase p (1,2,4, 8). You may have to do this for large values of n to observe meaningful speedup. Calculate relative speedup. Note that the Pleiades nodes have 8 cores per node. So there is no need to increase the number of threads beyond 8. In your report show the run-time table for this testing and also the speedup chart. 
+PS: If you are using Pleiades (which is what I recommend) you should still use the Queue system (SLURM) to make sure you get exclusive access to a node.   For this you need to run sbatch with -N1 option.
+
+2) For precision testing - keep n/p fixed, and increase p (1,2,.. up to 16 or 32). For this you will have to start with a good granularity (n/p) value which gave you some meaningful speedup from experiment set 1. The goal of this testing is to see if the PI value estimated by your code improves in precision with increase in n. Therefore, in your report make a table that shows the PI values estimated (up to say 20-odd decimal places) with each value of n tested. 
