@@ -20,6 +20,14 @@
 #include <stdarg.h>
 #include <algorithm>
 
+uint64_t bal_rand_r(int* seed) {
+  int randval = rand_r(seed);
+  while (randval == -(1 << 31)) {
+    randval = rand_r(seed);
+  }
+  return randval;
+}
+
 int main(int argc, char** argv, char** envp) {
 
   if (argc < 3) {
@@ -33,8 +41,8 @@ int main(int argc, char** argv, char** envp) {
   uint64_t rands_in_circ = 0;
   const uint64_t circ_radius_sq = (1 << 31) * (1 << 31);
   for (uint64_t i_iter=0; i_iter < num_rands; ++i_iter) {
-    uint64_t x_rand = rand_r(&rank);
-    uint64_t y_rand = rand_r(&rank);
+    uint64_t x_rand = bal_rand_r(&rank);
+    uint64_t y_rand = bal_rand_r(&rank);
     uint64_t dist_2_orig_sq = x_rand * x_rand + y_rand * y_rand;
     if (dist_2_orig_sq <= circ_radius_sq) {
       ++rands_in_circ;
