@@ -1,7 +1,7 @@
 # created by Joshua Shepherd
 
 CC = g++ #mpic++ #nvcc
-CPPFLAGS = -Wall -fopenmp -O3 -lpthread -std=c++11 #-DDEBUG
+CPPFLAGS = -Wall -fopenmp -O3 -lpthread -std=c++11 -DVERBOSE #-DDEBUG
 
 #CFLAGS=-std=c99 -Wall -O0 -m32# -DVERBOSE# -Iinclude
 
