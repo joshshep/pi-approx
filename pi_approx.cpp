@@ -35,7 +35,8 @@ typedef struct rational {
 
 
 
-
+// taken from stack overflow https://stackoverflow.com/a/40253170
+// It was getting hard to distinguish 100000000 from 1000000000 so now we print the thousands place in text.
 std::string nameForNumber (uint64_t number) {
   std::vector<std::string> ones {"","one", "two", "three", "four", "five", "six", "seven", "eight", "nine"};
   std::vector<std::string> teens{"ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen","sixteen", "seventeen", "eighteen", "nineteen"};
@@ -74,6 +75,13 @@ uint64_t bal_rand_r(uint32_t* seed) {
   return abs(randval);
 }
 
+/**
+ * Instead of randomly throwing darts, we can iterate across the grid and count the number of iterations
+ * inside the circle as opposed to outside.
+ * 
+ * This is restricted by the size of a 64 bit integer because we aren't rounded unlike in the floating point 
+ * implemenation below
+ * */
 uint64_t calc_ideal_ratio() {
   const uint64_t circ_radius_sq  = (((uint64_t) 1 << 31) - 1) * (((uint64_t) 1 << 31) - 1);
   const uint64_t num_in_quadrant = (((uint64_t) 1 << 31) - 1) * (((uint64_t) 1 << 31) - 1);
@@ -147,7 +155,7 @@ uint64_t calc_pi_float(int32_t rank, uint64_t num_rands) {
   std::uniform_real_distribution<double> sqDist(-circ_radius, circ_radius);
 
   uint64_t rands_in_circ = 0;
-  uint64_t step = 100000000; // 100 million
+  uint64_t step = 100000000; // 100 million ~ 1-2 seconds
   uint64_t i_iter = 0;
   uint32_t istep = 0;
   while (i_iter < num_rands) {
@@ -182,7 +190,10 @@ uint64_t time_serial(uint64_t num_rands) {
   uint64_t usecs = (t2.tv_sec-t1.tv_sec)*1e6 + (t2.tv_usec-t1.tv_usec);
   return usecs;
 }
-
+/**
+ * num_rands is the total number of random darts to be thrown by all threads
+ * 
+ * */
 uint64_t time_parallel(uint64_t num_threads, uint64_t num_rands) {
 
   struct timeval t1, t2;
@@ -226,6 +237,7 @@ int gen_speedup_table_linear(uint32_t num_threads, uint64_t total_num_rands) {
   return 0;
 }
 /**
+ * *_log() indicates that the table will iterate from start_num_rands to end_num_rands by `<<= 1`
  * start_num_rands must be divisible by num_threads
  * */
 int gen_accuracy_table_log(uint32_t num_threads, uint64_t start_num_rands, uint64_t end_num_rands) {
@@ -265,25 +277,20 @@ int main(int argc, char** argv, char** envp) {
   //uint32_t rank = 0;
   uint64_t total_num_rands = std::stoull(argv[1]);
   assert( total_num_rands % num_threads == 0 );
-  std::string num_name = nameForNumber(total_num_rands);
 
   #ifdef VERBOSE
+  std::string num_name = nameForNumber(total_num_rands);
   printf("# of threads: %d\n", num_threads);
   printf("total iterations: %lu (%s)\n", total_num_rands, num_name.c_str());
   #endif
 
   //gen_speedup_table_linear(num_threads, total_num_rands);
   
+
   const uint64_t DFLT_START_NUM_RANDS = 1024;
 
   gen_accuracy_table_log(num_threads, DFLT_START_NUM_RANDS, total_num_rands);
 
-
-
-  #ifdef VERBOSE
-  double exp_pi_ratio = (double) 4 * num_sum / total_num_rands;
-  printf("avg: %.10lf ~= %lu / %lu\n", exp_pi_ratio, 4 * num_sum, total_num_rands);
-  #endif
 
   
 
