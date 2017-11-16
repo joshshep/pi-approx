@@ -103,6 +103,12 @@ uint64_t calc_ideal_ratio() {
   return rands_in_circ;
 }
 
+/**
+ * This is approximately twice as fast as calc_pi_float()
+ * 
+ * However, I almost always get a pi estimate lower than the actual.
+ * 
+ * */
 uint64_t calc_exper_ratio(uint32_t rank, uint64_t num_rands) {
   uint32_t seed = rank;
   uint64_t rands_in_circ = 0;
@@ -121,14 +127,10 @@ uint64_t calc_exper_ratio(uint32_t rank, uint64_t num_rands) {
         ++rands_in_circ;
       }
     }
+    #ifdef VERBOSE
     double exp_pi_ratio = (double) 4 * rands_in_circ / step_stop;
 
     printf("r%2u step %u: %.10lf ~= 4 * %lu / %lu \n", rank, istep, exp_pi_ratio, rands_in_circ, step_stop);
-
-    #if 0
-    printf("r%2d step %u\n", rank, istep);
-    printf("r%2d  experimental ratio: 4 * %lu / %lu\n", rank, rands_in_circ, step_stop);
-    printf("r%2d  experimental ratio: %.10lf\n", rank, exp_pi_ratio);
     #endif
     ++istep;
   }
@@ -169,10 +171,87 @@ uint64_t calc_pi_float(int32_t rank, uint64_t num_rands) {
   return rands_in_circ;
 }
 
+uint64_t time_serial(uint64_t num_rands) {
+
+  struct timeval t1, t2;
+
+  gettimeofday(&t1,NULL);
+  calc_pi_float(0, num_rands);
+  gettimeofday(&t2,NULL);
+
+  uint64_t usecs = (t2.tv_sec-t1.tv_sec)*1e6 + (t2.tv_usec-t1.tv_usec);
+  return usecs;
+}
+
+uint64_t time_parallel(uint64_t num_threads, uint64_t num_rands) {
+
+  struct timeval t1, t2;
+
+  uint64_t num_rands_per_thread = num_rands / num_threads;
+
+  assert(num_rands % num_threads == 0);
+
+  gettimeofday(&t1,NULL);
+  uint64_t num_sum = 0;
+  #pragma omp parallel for reduction( + : num_sum )
+  for (uint64_t tid=0; tid < num_threads; ++tid) {
+    num_sum += calc_pi_float(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
+  }
+  gettimeofday(&t2,NULL);
+
+  uint64_t usecs = (t2.tv_sec-t1.tv_sec)*1e6 + (t2.tv_usec-t1.tv_usec);
+  return usecs;
+}
+
+/**
+ * Linear interpolation between 2 and num_threads 
+ * That is, total_num_rands must be divisible by all in [2,num_threads]
+ * */
+int gen_speedup_table_linear(uint32_t num_threads, uint64_t total_num_rands) {
+  uint32_t max_threads = num_threads; // inclusive
+
+  uint64_t usec_serial = time_parallel(1, total_num_rands);
+
+  printf("serial time: %lu usecs\n", usec_serial);
+
+  printf("# of threads,exec time,relative speedup\n");
+  //printf("# of threads,exec time\n");
+  for (uint32_t this_num_threads = 2; this_num_threads <= max_threads; this_num_threads++) {
+    uint64_t usec_parallel = time_parallel(this_num_threads, total_num_rands);
+
+    double rel_speedup = (double) usec_serial / usec_parallel;
+    printf("%d,%lu,%lf\n", this_num_threads, usec_parallel, rel_speedup);
+  }
+
+  return 0;
+}
+/**
+ * start_num_rands must be divisible by num_threads
+ * */
+int gen_accuracy_table_log(uint32_t num_threads, uint64_t start_num_rands, uint64_t end_num_rands) {
+  assert(start_num_rands % num_threads == 0);
+  printf("n,estimate error\n");
+  for (uint64_t this_num_rands = start_num_rands; this_num_rands <= end_num_rands; this_num_rands <<= 1) {
+    uint64_t num_rands_per_thread = this_num_rands / num_threads;
+    uint64_t num_sum = 0;
+    #pragma omp parallel for reduction( + : num_sum )
+    for (uint32_t tid=0; tid < num_threads; ++tid) {
+      num_sum += calc_pi_float(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
+    }
+    double pi_estimate = (double) 4 * num_sum / this_num_rands;
+    //printf("pi estimate: %lf , num_sum: %lu, M_PI: %lf\n",pi_estimate, num_sum, M_PI);
+    double estimate_error = fabs(M_PI - pi_estimate);
+    printf("%lu,%.10lf\n",this_num_rands,estimate_error);
+  }
+  
+
+  return 0;
+}
+
 int main(int argc, char** argv, char** envp) {
 
   if (argc != 3) {
-    printf("Usage: %s [# of iterations per thread] [# of threads]\n", argv[0]);
+    printf("Usage: %s [total # of iterations] [# of threads]\n", argv[0]);
     return -1;
   }
   
@@ -186,7 +265,6 @@ int main(int argc, char** argv, char** envp) {
   //uint32_t rank = 0;
   uint64_t total_num_rands = std::stoull(argv[1]);
   assert( total_num_rands % num_threads == 0 );
-  uint64_t num_rands_per_thread = total_num_rands / num_threads;
   std::string num_name = nameForNumber(total_num_rands);
 
   #ifdef VERBOSE
@@ -194,17 +272,17 @@ int main(int argc, char** argv, char** envp) {
   printf("total iterations: %lu (%s)\n", total_num_rands, num_name.c_str());
   #endif
 
-  uint64_t num_sum = 0;
-  #pragma omp parallel for reduction( + : num_sum )
-  for (int tid=0; tid < num_threads; ++tid) {
-    num_sum += calc_pi_float(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
-  }
+  //gen_speedup_table_linear(num_threads, total_num_rands);
+  
+  const uint64_t DFLT_START_NUM_RANDS = 1024;
 
-  double exp_pi_ratio = (double) 4 * num_sum / total_num_rands;
+  gen_accuracy_table_log(num_threads, DFLT_START_NUM_RANDS, total_num_rands);
+
+
+
   #ifdef VERBOSE
+  double exp_pi_ratio = (double) 4 * num_sum / total_num_rands;
   printf("avg: %.10lf ~= %lu / %lu\n", exp_pi_ratio, 4 * num_sum, total_num_rands);
-  #else
-  printf("%.10lf\n", exp_pi_ratio);
   #endif
 
   
