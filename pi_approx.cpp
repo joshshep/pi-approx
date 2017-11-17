@@ -185,7 +185,7 @@ uint64_t sim_parallel(uint64_t num_threads, uint64_t num_rands) {
   uint64_t num_sum = 0;
   #pragma omp parallel for reduction( + : num_sum )
   for (uint64_t tid=0; tid < num_threads; ++tid) {
-    num_sum += calc_exper_ratio(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
+    num_sum += calc_pi_float(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
   }
   return num_sum;
 }
