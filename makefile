@@ -25,5 +25,11 @@ $(TARGET): $(OBJ)
 test: all
 	./$(TARGET) 1024 16
 
+accuracy: all
+	./$(TARGET) 18000000000 16 --accuracy
+
+speedup: all
+	./$(TARGET) 1476034560 16 --speedup
+
 clean:
 	rm -rf $(OBJ) $(TARGET)
