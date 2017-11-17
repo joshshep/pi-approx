@@ -1,14 +1,10 @@
-# PP1 README #
+# PP5 README #
 
-To run the entire program run
+To run the program for the two experiments there are two make targets:
 ```
-make watch_run_all
+make accuracy
 ```
 
-then print out all of the results with
 ```
-cat slurm*
+make speedup
 ```
-assuming there were no slurm .out files already in the directory
-
-
