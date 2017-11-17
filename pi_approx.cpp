@@ -66,7 +66,10 @@ std::string nameForNumber (uint64_t number) {
 }
 
 
-
+/**
+ * We don't want a random integer, we want a random integer that is balanced on zero.
+ * So if we generate a value of (-1 << 31), we generate another value.
+ * */
 uint64_t bal_rand_r(uint32_t* seed) {
   int32_t randval = rand_r(seed);
   while (randval == (-1 << 31)) {
@@ -113,8 +116,6 @@ uint64_t calc_ideal_ratio() {
 
 /**
  * This is approximately twice as fast as calc_pi_float()
- * 
- * However, I almost always get a pi estimate lower than the actual.
  * 
  * */
 uint64_t calc_exper_ratio(uint32_t rank, uint64_t num_rands) {
@@ -179,6 +180,17 @@ uint64_t calc_pi_float(int32_t rank, uint64_t num_rands) {
   return rands_in_circ;
 }
 
+uint64_t sim_parallel(uint64_t num_threads, uint64_t num_rands) {
+  uint64_t num_rands_per_thread = num_rands / num_threads;
+  uint64_t num_sum = 0;
+  #pragma omp parallel for reduction( + : num_sum )
+  for (uint64_t tid=0; tid < num_threads; ++tid) {
+    num_sum += calc_exper_ratio(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
+  }
+  return num_sum;
+}
+
+
 uint64_t time_serial(uint64_t num_rands) {
 
   struct timeval t1, t2;
@@ -190,6 +202,7 @@ uint64_t time_serial(uint64_t num_rands) {
   uint64_t usecs = (t2.tv_sec-t1.tv_sec)*1e6 + (t2.tv_usec-t1.tv_usec);
   return usecs;
 }
+
 /**
  * num_rands is the total number of random darts to be thrown by all threads
  * 
@@ -198,16 +211,11 @@ uint64_t time_parallel(uint64_t num_threads, uint64_t num_rands) {
 
   struct timeval t1, t2;
 
-  uint64_t num_rands_per_thread = num_rands / num_threads;
-
-  assert(num_rands % num_threads == 0);
 
   gettimeofday(&t1,NULL);
-  uint64_t num_sum = 0;
-  #pragma omp parallel for reduction( + : num_sum )
-  for (uint64_t tid=0; tid < num_threads; ++tid) {
-    num_sum += calc_pi_float(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
-  }
+  
+  sim_parallel(num_threads, num_rands);
+
   gettimeofday(&t2,NULL);
 
   uint64_t usecs = (t2.tv_sec-t1.tv_sec)*1e6 + (t2.tv_usec-t1.tv_usec);
@@ -242,14 +250,10 @@ int gen_speedup_table_linear(uint32_t num_threads, uint64_t total_num_rands) {
  * */
 int gen_accuracy_table_log(uint32_t num_threads, uint64_t start_num_rands, uint64_t end_num_rands) {
   assert(start_num_rands % num_threads == 0);
+
   printf("n,estimate error\n");
   for (uint64_t this_num_rands = start_num_rands; this_num_rands <= end_num_rands; this_num_rands <<= 1) {
-    uint64_t num_rands_per_thread = this_num_rands / num_threads;
-    uint64_t num_sum = 0;
-    #pragma omp parallel for reduction( + : num_sum )
-    for (uint32_t tid=0; tid < num_threads; ++tid) {
-      num_sum += calc_pi_float(tid, num_rands_per_thread);//calc_exper_ratio(tid, num_rands);
-    }
+    uint64_t num_sum = sim_parallel(num_threads, this_num_rands);
     double pi_estimate = (double) 4 * num_sum / this_num_rands;
     //printf("pi estimate: %lf , num_sum: %lu, M_PI: %lf\n",pi_estimate, num_sum, M_PI);
     double estimate_error = fabs(M_PI - pi_estimate);
@@ -261,15 +265,20 @@ int gen_accuracy_table_log(uint32_t num_threads, uint64_t start_num_rands, uint6
 }
 
 int main(int argc, char** argv, char** envp) {
-
-  if (argc != 3) {
-    printf("Usage: %s [total # of iterations] [# of threads]\n", argv[0]);
+  std::string speedup_flag("--speedup");
+  std::string accuracy_flag("--accuracy");
+  if (argc < 3 || argc > 4) {
+    printf("Usage:\n");
+    printf("  %s <total # of iterations> <# of threads> [%s|%s]\n", 
+            argv[0], 
+            speedup_flag.c_str(), 
+            accuracy_flag.c_str());
     return -1;
   }
   
   int num_threads = atoi(argv[2]);
   #pragma omp parallel num_threads(num_threads)
-  assert( num_threads == omp_get_num_threads());
+  assert(num_threads == omp_get_num_threads());
 
 
   srand(0);
@@ -284,12 +293,35 @@ int main(int argc, char** argv, char** envp) {
   printf("total iterations: %lu (%s)\n", total_num_rands, num_name.c_str());
   #endif
 
-  //gen_speedup_table_linear(num_threads, total_num_rands);
+  if (argc == 3) {
+    // no special case
+    uint64_t num_sum = sim_parallel(num_threads, total_num_rands);
+    double exp_pi_ratio = (double) 4 * num_sum / total_num_rands;
+
+    printf("%lu iterations, %d threads: pi ~= 4 * %lu / %lu ~= %lf\n", 
+            total_num_rands, 
+            num_threads, 
+            num_sum, 
+            total_num_rands, 
+            exp_pi_ratio);
+    return 0;
+  }
+
+  /**
+   * Part 1
+  */
+  if (speedup_flag == argv[3])
+    gen_speedup_table_linear(num_threads, total_num_rands);
   
 
-  const uint64_t DFLT_START_NUM_RANDS = 1024;
 
-  gen_accuracy_table_log(num_threads, DFLT_START_NUM_RANDS, total_num_rands);
+  /**
+   * Part 2
+  */
+  if (accuracy_flag == argv[3]) {
+    const uint64_t DFLT_START_NUM_RANDS = 1024;
+    gen_accuracy_table_log(num_threads, DFLT_START_NUM_RANDS, total_num_rands);
+  }
 
 
   
